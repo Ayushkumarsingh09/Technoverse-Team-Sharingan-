@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Dashboard</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background-color: #f4f4f9;
+            font-family: 'Arial', sans-serif;
+        }
+        .container {
+            margin-top: 50px;
+            padding: 20px;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #333333;
+            font-weight: 700;
+        }
+        #image-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 50px;
+        }
+        #stock-image {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 5px;
+        }
+        #chart {
+            margin-top: 20px;
+        }
+        .btn {
+            margin: 10px 5px 0;
+        }
+        #additional-data {
+            margin-top: -350px;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+        }
+        #trade-log div {
+            padding: 10px;
+            background-color: #e9ecef;
+            margin-top: 10px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center">Trading Dashboard</h1>
+        <div class="form-group">
+            <label for="ticker">Select Stock:</label>
+            <select id="ticker" class="form-control">
+                <option value="AAPL">Apple (AAPL)</option>
+                <option value="MSFT">Microsoft (MSFT)</option>
+                <option value="GOOGL">Google (GOOGL)</option>
+                <option value="AMZN">Amazon (AMZN)</option>
+                <option value="TSLA">Tesla (TSLA)</option>
+            </select>
+            <button class="btn btn-primary mt-2" onclick="fetchData()">Get Data</button>
+        </div>
+        <div id="image-container">
+            <img id="stock-image" src="{{ url_for('static', filename='images/placeholder.png') }}" alt="Stock Image">
+        </div>
+        <div class="text-center">
+            <button class="btn btn-success" onclick="trade('buy')">Buy</button>
+            <button class="btn btn-danger" onclick="trade('sell')">Sell</button>
+        </div>
+        <canvas id="chart" width="800" height="400"></canvas>
+        <div id="trade-log"></div>
+        <div id="additional-data" class="text-center">
+            <h3>Additional Stock Data</h3>
+            <p>Bullish Scenario: <span id="bullish-scenario">60</span>%</p>
+            <p>Bearish Scenario: <span id="bearish-scenario">40</span>%</p>
+            <p>Net Profit/Loss: <span id="net-profit-loss">15</span>%</p>
+            <p>Volume: <span id="volume">1,200,000</span></p>
+            <p>Suggestion: <span id="suggestion">Hold</span></p>
+        </div>
+    </div>
+
+    <script>
+        let chart;
+
+        function fetchData() {
+            const ticker = document.getElementById('ticker').value;
+            fetch(`/get_data?ticker=${ticker}`)
+                .then(response => response.json())
+                .then(data => {
+                    const dates = data.map(d => d.Date);
+                    const prices = data.map(d => d.Close);
+                    renderChart(dates, prices);
+                    fetchImage(ticker);
+                    fetchAdditionalData(ticker);
+                })
+                .catch(error => console.error('Error fetching data:', error));
+        }
+
+        function renderChart(dates, prices) {
+            const ctx = document.getElementById('chart').getContext('2d');
+            if (chart) {
+                chart.destroy();
+            }
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dates,
+                    datasets: [{
+                        label: 'Price',
+                        data: prices,
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 1,
+                        fill: false
+                    }]
+                },
+                options: {
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'month'
+                            }
+                        },
+                        y: {
+                            beginAtZero: false
+                        }
+                    }
+                }
+            });
+        }
+
+        function trade(action) {
+            const ticker = document.getElementById('ticker').value;
+            const tradeData = {
+                action: action,
+                ticker: ticker,
+                price: chart.data.datasets[0].data[chart.data.datasets[0].data.length - 1],
+                date: chart.data.labels[chart.data.labels.length - 1]
+            };
+
+            fetch('/trade', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(tradeData)
+            })
+                .then(response => response.json())
+                .then(data => {
+                    logTrade(data.data);
+                });
+        }
+
+        function logTrade(tradeData) {
+            const log = document.getElementById('trade-log');
+            const newLog = document.createElement('div');
+            newLog.innerHTML = `Trade executed: ${tradeData.action.toUpperCase()} ${tradeData.ticker} at ${tradeData.price} on ${tradeData.date}`;
+            log.appendChild(newLog);
+        }
+
+        function fetchImage(ticker) {
+            fetch(`/get_image?ticker=${ticker}`)
+                .then(response => response.json())
+                .then(data => {
+                    const image = document.getElementById('stock-image');
+                    image.src = data.image_path;
+                })
+                .catch(error => console.error('Error fetching image:', error));
+        }
+
+        function fetchAdditionalData(ticker) {
+            fetch(`/get_additional_data?ticker=${ticker}`)
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('bullish-scenario').innerText = data.bullish_scenario;
+                    document.getElementById('bearish-scenario').innerText = data.bearish_scenario;
+                    document.getElementById('net-profit-loss').innerText = data.net_profit_loss;
+                    document.getElementById('volume').innerText = data.volume;
+                    document.getElementById('suggestion').innerText = data.suggestion;
+                })
+                .catch(error => console.error('Error fetching additional data:', error));
+        }
+
+        // Initial fetch for default stock
+        fetchData();
+    </script>
+</body>
+</html>
